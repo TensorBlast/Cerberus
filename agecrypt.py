@@ -236,8 +236,8 @@ def main(page: Page):
         elif operation == "decrypt":
             cmd = ["age", "--decrypt"]
         elif operation == "keygen":
-            cmd = ["age-keygen"]
             if not passphrase_checkbox.value:
+                cmd = ["age-keygen"]
                 if output_file_path:
                     cmd.extend(["-o", output_file_path])
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -252,60 +252,47 @@ def main(page: Page):
                     output_area.value = stdout
                 page.update()
                 return
-            elif passphrase_checkbox.value:
-                temp_fd, temp_path = tempfile.mkstemp()
-                try:
-                    os.chmod(temp_path, stat.S_IRUSR | stat.S_IWUSR)
-
-                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    stdout, stderr = process.communicate()
-                    stdout = ansi_escape.sub('', stdout)
-                    if process.returncode != 0:
-                        page.show_snack_bar(flet.SnackBar(content=flet.Text(f"Error: {stderr}")))
-                        return
-                    
-                    with os.fdopen(temp_fd, 'w') as f:
-                        f.write(stdout.strip())
-                        f.flush()
-                        
-                    cmd = ["age", "-p"]
+            else:
+                # Fixed passphrase-protected keygen approach
+                cmd = "age-keygen"
+                if output_file_path:
+                    output_path = output_file_path.replace("'", "'\\''")  # Properly escape single quotes
+                    cmd += f" | age -p"
                     if armor_checkbox.value:
-                        cmd.append("-a")
-                    if output_file_path:
-                        cmd.extend(["-o", output_file_path])
-                    cmd.append(temp_path)
-                finally:
-                    child = pexpect.spawn(cmd[0], cmd[1:], encoding='utf-8')
-                    # child.expect("Enter passphrase.*:")
-                    # if len(passphrase_field.value) >= 1:
-                    #     child.sendline(passphrase_field.value)
-                    # if operation != "decrypt":
-                    #     child.expect("Confirm passphrase:.*")
-                    #     child.sendline(passphrase_field.value)
+                        cmd += " -a"
+                    cmd += f" -o '{output_path}'"  # Wrap path in single quotes without escaping spaces
 
+                child = pexpect.spawn('/bin/sh', ['-c', cmd], encoding='utf-8')
+                
+                # Wait for key generation output before proceeding
+                try:
+                    child.expect("Public key: .*\r\n")
+                    
+                    # Now expect the passphrase prompt
                     child.expect("Enter passphrase.*:")
                     password = handle_password_dialog("Enter passphrase")
                     if password:
                         child.sendline(password)
-                        if operation != "decrypt":
-                            child.expect("Confirm passphrase.*")
-                            confirm_password = handle_password_dialog("Confirm passphrase")
-                            if confirm_password:
-                                child.sendline(confirm_password)
+                        child.expect("Confirm passphrase.*")
+                        confirm_password = handle_password_dialog("Confirm passphrase")
+                        if confirm_password:
+                            child.sendline(confirm_password)
                     else:
                         child.sendline('')
 
-                    child.expect(pexpect.EOF)                    
-                    after = child.after
-                    before = child.before
-                        
+                    child.expect(pexpect.EOF)
+                    output = child.before
+                    
                     child.close()
                     if child.exitstatus == 0:
-                        output_area.value = "Written to " + output_file_path + "\n" + before
+                        output_area.value = "Success! Key generated and encrypted.\n" + output
                     else:
-                        output_area.value = "Error: " + child.exitstatus + "\n" + after
-                    page.update()
-                    return
+                        output_area.value = "Error: " + output
+                except Exception as e:
+                    output_area.value = f"Error: {str(e)}\nCommand: {cmd}"
+                
+                page.update()
+                return
 
 
         # Handle options
