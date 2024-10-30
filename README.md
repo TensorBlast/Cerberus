@@ -70,12 +70,6 @@ To decrypt an `.age` file after selection `Decrypt`, select input file using `Se
 
 To encrypt to multiple recipients, specify a recipient text file with one recipient on each line. To encrypt to a single recipient, you can paste it directly in the `Recipient Keys` text field.
 
-# Compilation instructions
-
-1. Install [Rust](https://www.rust-lang.org/tools/install), open `winage`, and run `cargo build --release`.
-
-2. Install and open Visual Studio 2019. Go to `Extensions` > `Manage Extensions` and install `Microsoft Visual Studio Installer Projects`. Open the `winage\winage\age.sln` Solution, select `Release`, `x64`, and build.
-
 # Restrictions
 
 - All features supported by age work (No restrictions)
