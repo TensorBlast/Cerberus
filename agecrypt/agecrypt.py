@@ -32,7 +32,7 @@ import platform
 import stat
 
 
-def get_binary_path(binary_name):
+def get_binary_path_old(binary_name):
     """Get the correct binary path based on platform and architecture."""
     cpu_arch = platform.machine().lower()
     
@@ -81,6 +81,54 @@ def get_binary_path(binary_name):
              for p in possible_paths]
         )
     )
+
+def get_binary_path(binary_name):
+    """Get the correct binary path based on platform and architecture."""
+    cpu_arch = platform.machine().lower()
+    
+    arch_map = {
+        'x86_64': 'amd64',
+        'amd64': 'amd64',
+        'arm64': 'arm64',
+        'aarch64': 'arm64',
+    }
+    cpu_arch = arch_map.get(cpu_arch, cpu_arch)
+    
+    platform_name = 'mac' if sys.platform.startswith('darwin') else 'linux'
+    
+    # List of possible base paths
+    possible_paths = [
+        # PyInstaller path
+        getattr(sys, '_MEIPASS', None),
+        # Package installation path
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        # Development path
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        # System-wide installation path
+        sys.prefix,
+        # User installation path
+        os.path.expanduser('~/.local'),
+    ]
+    
+    # Remove None values
+    possible_paths = [p for p in possible_paths if p is not None]
+    
+    # Try each possible path
+    for base_path in possible_paths:
+        binary_path = os.path.join(base_path, 'bin', platform_name, cpu_arch, binary_name)
+        if os.path.exists(binary_path):
+            st = os.stat(binary_path)
+            os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
+            return binary_path
+    
+    raise FileNotFoundError(
+        f"Binary not found for {platform_name}/{cpu_arch}/{binary_name}\n"
+        f"Searched paths:\n" + "\n".join(
+            [os.path.join(p, 'bin', platform_name, binary_name) 
+             for p in possible_paths]
+        )
+    )
+
 
 # Update executable paths and ensure they're executable
 AGE_EXECUTABLE = get_binary_path('age')

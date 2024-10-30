@@ -43,7 +43,7 @@ datas = collect_data_files('agecrypt') + binary_files
 a = Analysis(
     ['agecrypt/__main__.py'],
     pathex=[],
-    binaries=[],
+    binaries=binary_files,
     datas=datas,
     hiddenimports=['flet.web'],
     hookspath=[],
