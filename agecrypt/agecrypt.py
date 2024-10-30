@@ -27,24 +27,31 @@ import os
 import time
 import re
 
+import sys
+
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for development and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+AGE_EXECUTABLE = resource_path('bin/age')
+AGE_KEYGEN_EXECUTABLE = resource_path('bin/age-keygen')
 
 def main(page: Page):
     # Update window styling
-    page.title = "Age Encryption"
+    page.title = "AgeCrypt"
     page.window.width = 600
     page.window.height = 800
     page.padding = 30
     page.bgcolor = "#1E1E1E"  # Dark background
     page.theme_mode = "dark"
 
-    # Get absolute path to icon
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    icon_path = os.path.join(current_dir, "assets", "icon.png")
-
-    # Try both PNG and ICO formats for maximum compatibility
-    page.window.icon = icon_path
-    page.window.icon_ico = icon_path  # Some platforms prefer ICO
-    page.icon = icon_path  # This sets the taskbar icon
 
     # Variables to hold file paths
     input_file_path = ""
@@ -52,8 +59,6 @@ def main(page: Page):
     identity_file_paths = []
     recipients_file_paths = []
     identity_files_encrypted = []
-
-    x25519_key = ""
 
     def update_output_file_name():
         nonlocal input_file_path, output_file_path
@@ -885,4 +890,9 @@ def main(page: Page):
         scroll=True,
     ))
 
-flet.app(target=main)
+# Get absolute path to icon
+current_dir = os.path.dirname(os.path.abspath(__file__))
+assets_dir = os.path.join(current_dir, "assets")
+icon_path = os.path.join(current_dir, "assets", "icon.png")
+
+flet.app(target=main, assets_dir=assets_dir)
