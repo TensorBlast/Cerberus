@@ -34,10 +34,8 @@ import stat
 
 def get_binary_path(binary_name):
     """Get the correct binary path based on platform and architecture."""
-    # Get CPU architecture
     cpu_arch = platform.machine().lower()
     
-    # Normalize architecture names
     arch_map = {
         'x86_64': 'amd64',
         'amd64': 'amd64',
@@ -46,7 +44,6 @@ def get_binary_path(binary_name):
     }
     cpu_arch = arch_map.get(cpu_arch, cpu_arch)
     
-    # Determine OS platform
     if sys.platform.startswith('darwin'):
         platform_name = 'mac'
     elif sys.platform.startswith('linux'):
@@ -54,40 +51,36 @@ def get_binary_path(binary_name):
     else:
         raise OSError(f"Unsupported platform: {sys.platform}")
 
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        # When running from source or pip install, use the package's bin directory
-        if getattr(sys, 'frozen', False):
-            # Running as bundled executable
-            base_path = os.path.dirname(sys.executable)
-        else:
-            # Running from source, go up one directory from the current file
-            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # List of possible base paths
+    possible_paths = [
+        # PyInstaller path
+        getattr(sys, '_MEIPASS', None),
+        # Development path (relative to package)
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        # Installed package path
+        os.path.dirname(os.path.abspath(__file__)),
+        # Current working directory
+        os.getcwd(),
+    ]
 
-    # Construct binary path
-    binary_path = os.path.join(base_path, 'bin', platform_name, cpu_arch, binary_name)
-    
-    # Make binary executable
-    if os.path.exists(binary_path):
-        st = os.stat(binary_path)
-        os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
-    else:
-        # Try alternate path for PyInstaller bundle
-        alt_binary_path = os.path.join(base_path, platform_name, cpu_arch, binary_name)
-        if os.path.exists(alt_binary_path):
-            binary_path = alt_binary_path
+    # Remove None values
+    possible_paths = [p for p in possible_paths if p is not None]
+
+    # Try each possible path
+    for base_path in possible_paths:
+        binary_path = os.path.join(base_path, 'bin', platform_name, cpu_arch, binary_name)
+        if os.path.exists(binary_path):
             st = os.stat(binary_path)
             os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
-        else:
-            raise FileNotFoundError(
-                f"Binary not found: {binary_path}\n"
-                f"System details: {sys.platform}, {platform.machine()}\n"
-                f"Base path: {base_path}"
-            )
+            return binary_path
 
-    return binary_path
+    raise FileNotFoundError(
+        f"Binary not found for {platform_name}/{cpu_arch}/{binary_name}\n"
+        f"Searched paths:\n" + "\n".join(
+            [os.path.join(p, 'bin', platform_name, cpu_arch, binary_name) 
+             for p in possible_paths]
+        )
+    )
 
 # Update executable paths and ensure they're executable
 AGE_EXECUTABLE = get_binary_path('age')
