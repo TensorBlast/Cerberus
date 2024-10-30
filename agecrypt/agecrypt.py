@@ -28,20 +28,69 @@ import time
 import re
 
 import sys
+import platform
 
 
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for development and for PyInstaller """
+    """Get absolute path to resource, works for dev and PyInstaller"""
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
-        base_path = os.path.abspath(".")
+        # If not running as bundled executable, use the script's directory
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    # Construct the absolute path
+    abs_path = os.path.join(base_path, relative_path)
+    
+    # Verify the path exists
+    if not os.path.exists(abs_path):
+        raise FileNotFoundError(f"Resource not found: {abs_path}")
+        
+    return abs_path
 
-    return os.path.join(base_path, relative_path)
+def get_system_info():
+    """Determine the operating system and architecture."""
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    
+    # Normalize architecture names
+    if machine in ['x86_64', 'amd64']:
+        arch = 'amd64'
+    elif machine in ['arm64', 'aarch64']:
+        arch = 'arm64'
+    else:
+        arch = machine
+    
+    # Normalize OS names
+    if system == 'darwin':
+        os_name = 'mac'
+    elif system == 'linux':
+        os_name = 'linux'
+    else:
+        os_name = system
+        
+    return os_name, arch
 
-AGE_EXECUTABLE = resource_path('bin/age')
-AGE_KEYGEN_EXECUTABLE = resource_path('bin/age-keygen')
+# Add this right after the resource_path function
+os_name, arch = get_system_info()
+
+# Update executable paths and ensure they're executable
+AGE_EXECUTABLE = resource_path(f'bin/{os_name}/{arch}/age')
+AGE_KEYGEN_EXECUTABLE = resource_path(f'bin/{os_name}/{arch}/age-keygen')
+
+# Make executables executable on Unix-like systems
+if os_name in ['mac', 'linux']:
+    try:
+        os.chmod(AGE_EXECUTABLE, 0o755)
+        os.chmod(AGE_KEYGEN_EXECUTABLE, 0o755)
+    except Exception as e:
+        print(f"Warning: Could not set executable permissions: {e}")
 
 def main(page: Page):
     # Update window styling
@@ -225,12 +274,12 @@ def main(page: Page):
             return password_value
 
         if operation == "encrypt":
-            cmd = ["age", "--encrypt"]
+            cmd = [AGE_EXECUTABLE, "--encrypt"]
         elif operation == "decrypt":
-            cmd = ["age", "--decrypt"]
+            cmd = [AGE_EXECUTABLE, "--decrypt"]
         elif operation == "keygen":
             if not passphrase_checkbox.value:
-                cmd = ["age-keygen"]
+                cmd = [AGE_KEYGEN_EXECUTABLE]
                 if output_file_path:
                     cmd.extend(["-o", output_file_path])
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -247,10 +296,10 @@ def main(page: Page):
                 return
             else:
                 # Fixed passphrase-protected keygen approach
-                cmd = "age-keygen"
+                cmd = AGE_KEYGEN_EXECUTABLE
                 if output_file_path:
                     output_path = output_file_path.replace("'", "'\\''")  # Properly escape single quotes
-                    cmd += f" | age -p"
+                    cmd += f" | {AGE_EXECUTABLE} -p"
                     if armor_checkbox.value:
                         cmd += " -a"
                     cmd += f" -o '{output_path}'"  # Wrap path in single quotes without escaping spaces
@@ -274,6 +323,10 @@ def main(page: Page):
                         confirm_password = handle_password_dialog(confirm_prompt)
                         if confirm_password:
                             child.sendline(confirm_password)
+                        else:
+                            output_area.value = "Error: No confirmation password provided. Operation cancelled."
+                            page.update()
+                            return
                     else:
                         child.sendline('')
 
@@ -385,6 +438,14 @@ def main(page: Page):
                         confirm_password = handle_password_dialog("Confirm passphrase")
                         if confirm_password:
                             child.sendline(confirm_password)
+                        else:
+                            output_area.value = "Error: No confirmation password provided. Operation cancelled."
+                            page.update()
+                            return
+                elif operation == "decrypt":
+                    output_area.value = "Error: No passphrase provided. Operation cancelled."
+                    page.update()
+                    return
                 else:
                     child.sendline('')
             elif num_passwords_needed_for_identity_files > 0:
@@ -784,10 +845,16 @@ def main(page: Page):
         elif operation_group.value == "decrypt":
 
             if identity_files.value:
+                identity_files.disabled = False
+                select_identity_button.disabled = False
+                clear_identity_button.disabled = False
+
                 passphrase_checkbox.value = False
                 passphrase_checkbox.disabled = True
             
             elif passphrase_checkbox.value:
+                passphrase_checkbox.disabled = False
+                
                 identity_files.value = ""
                 identity_files.disabled = True
                 select_identity_button.disabled = True
