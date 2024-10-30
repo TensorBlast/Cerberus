@@ -127,8 +127,8 @@ def main(page: Page):
             identity_files.value = ", ".join(identity_file_paths)
             for file in identity_file_paths:
                 identity_files_encrypted.append(file.endswith('.age'))
-            passphrase_checkbox.disabled = True
-            passphrase_checkbox_changed(None)
+            
+            update_options()
             page.update()
 
     def select_recipients_files(e: FilePickerResultEvent):
@@ -138,33 +138,12 @@ def main(page: Page):
             recipients_file_paths = [file.path for file in e.files]
             recipients_files.value = ", ".join(recipients_file_paths)
             
-            passphrase_checkbox.disabled = True
-            passphrase_checkbox_changed(None)
+            update_options()
             page.update()
 
     # Function to toggle passphrase field visibility
     def passphrase_checkbox_changed(e):
-        if passphrase_checkbox.value:
-            # passphrase_field.visible = True
-            # copy_button.visible = True
-            # passphrase_label.visible = True
-            if operation_group.value == 'encrypt':
-                recipients_files.disabled = True
-                select_recipients_button.disabled = True
-                recipient_key_field.disabled = True
-                identity_files.disabled = True
-                select_identity_button.disabled = True
-        else:
-            recipients_files.disabled = False
-            select_recipients_button.disabled = False
-            recipient_key_field.disabled = False
-            identity_files.disabled = False
-            select_identity_button.disabled = False
-        # else:
-            
-            # passphrase_field.visible = False
-            # copy_button.visible = False
-            # passphrase_label.visible = False
+        update_options()
         page.update()
     
     def copy_passphrase(e):
@@ -199,7 +178,7 @@ def main(page: Page):
         def handle_password_dialog(prompt_text):
             nonlocal password_value
             password_field = TextField(
-                label=prompt_text,
+                label="Password",  # Simplified label
                 password=True,
                 can_reveal_password=True,
                 width=300
@@ -214,7 +193,10 @@ def main(page: Page):
             dlg = flet.AlertDialog(
                 modal=True,
                 title=flet.Text("Password Required"),
-                content=password_field,
+                content=flet.Column([
+                    flet.Text(prompt_text),  # Prompt text above the password field
+                    password_field
+                ], width=400, height=100),  # Make the content area bigger
                 actions=[
                     flet.TextButton("Cancel", on_click=lambda _: close_dialog(None)),
                     flet.TextButton("OK", on_click=close_dialog),
@@ -262,19 +244,23 @@ def main(page: Page):
                         cmd += " -a"
                     cmd += f" -o '{output_path}'"  # Wrap path in single quotes without escaping spaces
 
-                child = pexpect.spawn('/bin/sh', ['-c', cmd], encoding='utf-8')
-                
-                # Wait for key generation output before proceeding
                 try:
-                    child.expect("Public key: .*\r\n")
+                    # First ensure any existing child process is cleaned up
+                        
+                    child = pexpect.spawn('/bin/sh', ['-c', cmd], encoding='utf-8')
+                    
+                    # Wait for key generation output before proceeding
+                    # child.expect("Public key: .*\r\n", timeout=5)
                     
                     # Now expect the passphrase prompt
-                    child.expect("Enter passphrase.*:")
-                    password = handle_password_dialog("Enter passphrase")
+                    child.expect("Enter passphrase.*:", timeout=5)
+                    prompt_text = child.after  # This captures the actual prompt from age
+                    password = handle_password_dialog(prompt_text)
                     if password:
                         child.sendline(password)
                         child.expect("Confirm passphrase.*")
-                        confirm_password = handle_password_dialog("Confirm passphrase")
+                        confirm_prompt = child.after  # Capture the confirmation prompt
+                        confirm_password = handle_password_dialog(confirm_prompt)
                         if confirm_password:
                             child.sendline(confirm_password)
                     else:
@@ -291,12 +277,6 @@ def main(page: Page):
                     stdout = ansi_escape.sub('', output)
 
                     if exit_status == 0:
-                        # Figure out if stdout has output i.e. was encrypt done without file output
-                        output_area.value = "Success! Key generated and encrypted.\n"
-
-
-                        # if not passphrase_field.value:
-                            # Parse the generated passphrase from output and populate passphrase_field
                         match = re.search(r'age: using autogenerated passphrase \"(.*)\"', stdout)
                         if match:
                             generated_passphrase = match.group(1)
@@ -330,7 +310,7 @@ def main(page: Page):
                         # output_area.value += "\n" + stderr
                         output_area.value += "\n" + "Command Executed:\n" + str(cmd)
                     
-                    child.close()
+                    child.close(force=True)
                     
                 except Exception as e:
                     output_area.value = f"Error: {str(e)}\nCommand: {cmd}"
@@ -399,7 +379,8 @@ def main(page: Page):
             elif num_passwords_needed_for_identity_files > 0:
                 for i in range(num_passwords_needed_for_identity_files):
                     child.expect("Enter passphrase.*:")
-                    password = handle_password_dialog("Enter passphrase")
+                    prompt_text = child.after  # This captures the actual prompt from age
+                    password = handle_password_dialog(prompt_text)
                     if password:
                         child.sendline(password)
                     else:
@@ -522,8 +503,17 @@ def main(page: Page):
 
     select_output_button = ElevatedButton(
         text="Select Output File",
+        style=button_style,
         on_click=select_output_file_click,
     )
+
+    def pick_recipients_files(e: flet.FilePickerResultEvent):
+        recipients_files_picker.pick_files(allow_multiple=True)
+        update_options()
+
+    def pick_identity_files(e: flet.FilePickerResultEvent):
+        identity_files_picker.pick_files(allow_multiple=True)
+        update_options()
 
     identity_files = TextField(
         label="Identity Files", 
@@ -538,7 +528,8 @@ def main(page: Page):
 
     select_identity_button = ElevatedButton(
         text="Select Identity Files",
-        on_click=lambda _: identity_files_picker.pick_files(allow_multiple=True)
+        style=button_style,
+        on_click=pick_identity_files
     )
 
     recipients_files = TextField(
@@ -554,12 +545,16 @@ def main(page: Page):
 
     select_recipients_button = ElevatedButton(
         text="Select Recipients Files",
-        on_click=lambda _: recipients_files_picker.pick_files(allow_multiple=True)
+        style=button_style,
+        on_click=pick_recipients_files
     )
+
+
 
     recipient_key_field = TextField(
         label="Recipient Keys (comma-separated)",
         multiline=True,
+        expand=True,
         border_radius=8,
         border_color="#333333",
         focused_border_color="#0A84FF",
@@ -572,34 +567,52 @@ def main(page: Page):
         output_area.value = ""
         if operation_group.value == "encrypt":
             recipient_key_field.disabled = False
+            clear_recipient_keys_button.disabled = False
             recipients_files.disabled = False
             select_recipients_button.disabled = False
+            clear_recipients_button.disabled = False
             identity_files.disabled = False
             select_identity_button.disabled = False
+            clear_identity_button.disabled = False
             input_file.disabled = False
             select_input_button.disabled = False
+            output_file.disabled = False
+            select_output_button.disabled = False
+            clear_output_button.disabled = False
             armor_checkbox.disabled = False
             passphrase_checkbox.disabled = False
         elif operation_group.value == "decrypt":
             recipient_key_field.disabled = True
+            clear_recipient_keys_button.disabled = True
             recipients_files.disabled = True
             select_recipients_button.disabled = True
+            clear_recipients_button.disabled = True
             identity_files.disabled = False
             select_identity_button.disabled = False
+            clear_identity_button.disabled = False
             input_file.disabled = False
             select_input_button.disabled = False
+            output_file.disabled = False
+            select_output_button.disabled = False
+            clear_output_button.disabled = False
+            armor_checkbox.value = False
             armor_checkbox.disabled = True
             passphrase_checkbox.disabled = False
         elif operation_group.value == "keygen":
             recipient_key_field.disabled = True
+            clear_recipient_keys_button.disabled = True
             recipients_files.disabled = True
             select_recipients_button.disabled = True
+            clear_recipients_button.disabled = True
             identity_files.disabled = True
             select_identity_button.disabled = True
+            clear_identity_button.disabled = True
+            input_file.value = ""
             input_file.disabled = True
             select_input_button.disabled = True
             armor_checkbox.disabled = False
             passphrase_checkbox.disabled = False
+        clear_recipient_keys()
         clear_identity_files()
         clear_recipients_files()
         page.update()
@@ -664,38 +677,6 @@ def main(page: Page):
         bgcolor="#2D2D2D",
     )
 
-    # Initialize the fields with the appropriate disabled state
-    recipient_key_field = TextField(
-        label="Recipient Keys (comma-separated)",
-        multiline=True,
-        disabled=operation_group.value != "encrypt"
-    )
-
-    recipients_files = TextField(
-        label="Recipients Files",
-        read_only=True,
-        expand=True,
-        disabled=operation_group.value != "encrypt"
-    )
-
-    select_recipients_button = ElevatedButton(
-        text="Select Recipients Files",
-        on_click=lambda _: recipients_files_picker.pick_files(allow_multiple=True),
-        disabled=operation_group.value != "encrypt"
-    )
-
-    identity_files = TextField(
-        label="Identity Files",
-        read_only=True,
-        expand=True,
-        disabled=operation_group.value != "decrypt"
-    )
-
-    select_identity_button = ElevatedButton(
-        text="Select Identity Files",
-        on_click=lambda _: identity_files_picker.pick_files(allow_multiple=True),
-        disabled=operation_group.value != "decrypt"
-    )
     # Layout
     # Clear buttons and their callbacks
     clear_output_button = IconButton(
@@ -716,13 +697,110 @@ def main(page: Page):
         on_click=lambda _: clear_identity_files()
     )
 
+    def update_options():
+        if operation_group.value == "encrypt":
+            if recipient_key_field.value:
+                recipients_files.value = ""
+                recipients_files.disabled = True
+                select_recipients_button.disabled = True
+                clear_recipients_button.disabled = True
+                
+                identity_files.value = ""
+                identity_files.disabled = True
+                select_identity_button.disabled = True
+                clear_identity_button.disabled = True
+
+                passphrase_checkbox.value = False
+                passphrase_checkbox.disabled = True
+
+            elif recipients_files.value:
+                recipient_key_field.value = ""
+                recipient_key_field.disabled = True
+                clear_recipient_keys_button.disabled = True
+
+                identity_files.value = ""
+                identity_files.disabled = True
+                select_identity_button.disabled = True
+                clear_identity_button.disabled = True
+
+                passphrase_checkbox.value = False
+                passphrase_checkbox.disabled = True
+            
+            elif identity_files.value:
+                recipient_key_field.value = ""
+                recipient_key_field.disabled = True
+                clear_recipient_keys_button.disabled = True
+                recipients_files.value = ""
+                recipients_files.disabled = True
+                select_recipients_button.disabled = True
+                clear_recipients_button.disabled = True
+
+                passphrase_checkbox.value = False
+                passphrase_checkbox.disabled = True
+            
+            elif passphrase_checkbox.value:
+                recipient_key_field.value = ""
+                recipient_key_field.disabled = True
+                clear_recipient_keys_button.disabled = True
+
+                recipients_files.value = ""
+                recipients_files.disabled = True
+                select_recipients_button.disabled = True
+                clear_recipients_button.disabled = True
+
+                identity_files.value = ""
+                identity_files.disabled = True
+                select_identity_button.disabled = True
+                clear_identity_button.disabled = True
+            
+            else:
+                recipient_key_field.disabled = False
+                clear_recipient_keys_button.disabled = False
+
+                recipients_files.disabled = False
+                select_recipients_button.disabled = False
+                clear_recipients_button.disabled = False
+
+                identity_files.disabled = False
+                select_identity_button.disabled = False
+                clear_identity_button.disabled = False
+        elif operation_group.value == "decrypt":
+
+            if identity_files.value:
+                passphrase_checkbox.value = False
+                passphrase_checkbox.disabled = True
+            
+            elif passphrase_checkbox.value:
+                identity_files.value = ""
+                identity_files.disabled = True
+                select_identity_button.disabled = True
+                clear_identity_button.disabled = True
+
+            else:
+                passphrase_checkbox.disabled = False
+                identity_files.disabled = False
+                select_identity_button.disabled = False
+                clear_identity_button.disabled = False
+
+
+    def clear_recipient_keys():
+        recipient_key_field.value = ""
+        update_options()
+        page.update()
+
+    clear_recipient_keys_button = IconButton(
+        icon=icons.CLEAR,
+        tooltip="Clear Recipient Keys",
+        on_click=lambda _: clear_recipient_keys()
+    )
+
     def clear_identity_files():
         nonlocal identity_file_paths
         nonlocal identity_files_encrypted
         identity_file_paths = []
         identity_files.value = ""
         identity_files_encrypted = []
-        passphrase_checkbox.disabled = False
+        update_options()
         page.update()
 
     clear_recipients_button = IconButton(
@@ -735,7 +813,7 @@ def main(page: Page):
         nonlocal recipients_file_paths
         recipients_file_paths = []
         recipients_files.value = ""
-        passphrase_checkbox.disabled = False
+        update_options()
         page.update()
     # Now call on_operation_change after all UI elements exist
     on_operation_change(None)
@@ -774,7 +852,7 @@ def main(page: Page):
                 content=Column([
                     Row([input_file, select_input_button], spacing=10),
                     Row([output_file, select_output_button, clear_output_button], spacing=10),
-                    recipient_key_field,
+                    Row([recipient_key_field, clear_recipient_keys_button], spacing=10),
                     Row([recipients_files, select_recipients_button, clear_recipients_button], spacing=10),
                     Row([identity_files, select_identity_button, clear_identity_button], spacing=10),
                 ], spacing=8),
