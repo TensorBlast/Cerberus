@@ -37,6 +37,15 @@ def main(page: Page):
     page.bgcolor = "#1E1E1E"  # Dark background
     page.theme_mode = "dark"
 
+    # Get absolute path to icon
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(current_dir, "assets", "icon.png")
+
+    # Try both PNG and ICO formats for maximum compatibility
+    page.window.icon = icon_path
+    page.window.icon_ico = icon_path  # Some platforms prefer ICO
+    page.icon = icon_path  # This sets the taskbar icon
+
     # Variables to hold file paths
     input_file_path = ""
     output_file_path = ""

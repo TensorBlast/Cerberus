@@ -1,4 +1,16 @@
-/.DS_Store
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.pyc
+__pycache__/
+.DS_Store
+
+# Mac specific
+*.app
+*.dmg
+
+# Agecrypt files
 /agecrypt copy working 2.py
 /agecrypt old.py
 /agecrypt working.py
