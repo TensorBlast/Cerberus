@@ -304,7 +304,7 @@ def main(page: Page):
                             dlg.open = True
                             page.update()
                         else:
-                            output_area.value += "\nSuccessfully generated encrypted identity file"
+                            output_area.value = "Successfully generated encrypted identity file"
                     else:
                         output_area.value = f"Error (exit code {child.exitstatus}):\n{stdout}"
                         # output_area.value += "\n" + stderr
@@ -466,8 +466,14 @@ def main(page: Page):
 
     # Update button styling
     button_style = ButtonStyle(
-        color={ControlState.DEFAULT: "#FFFFFF"},
-        bgcolor={ControlState.DEFAULT: "#0A84FF"},  # iOS/macOS blue
+        color={
+            ControlState.DEFAULT: "#FFFFFF",
+            ControlState.DISABLED: "#AAAAAA",  # Pale text when disabled
+        },
+        bgcolor={
+            ControlState.DEFAULT: "#0A84FF",  # iOS/macOS blue
+            ControlState.DISABLED: "#7FB5FF",  # Pale blue when disabled
+        },
         shape={ControlState.DEFAULT: RoundedRectangleBorder(radius=8)},
         padding=12,
     )
@@ -485,7 +491,7 @@ def main(page: Page):
     )
 
     select_input_button = ElevatedButton(
-        text="Select Input",  # Shorter text
+        text="Select Input",
         style=button_style,
         on_click=lambda _: input_file_picker.pick_files()
     )
@@ -781,7 +787,9 @@ def main(page: Page):
                 identity_files.disabled = False
                 select_identity_button.disabled = False
                 clear_identity_button.disabled = False
+        page.update()
 
+    recipient_key_field.on_change = lambda e: update_options()
 
     def clear_recipient_keys():
         recipient_key_field.value = ""
