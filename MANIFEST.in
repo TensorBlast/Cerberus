@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+recursive-include agecrypt/assets *
+recursive-include bin/mac/arm64 *
+recursive-include bin/mac/amd64 *
+recursive-include bin/linux/arm64 *
+recursive-include bin/linux/amd64 * 
