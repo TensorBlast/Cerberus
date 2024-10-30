@@ -5,7 +5,7 @@ setup(
     version="1.0.0",
     packages=["agecrypt"],
     package_data={
-        "agecrypt": ["assets/*"],
+        "agecrypt": ["assets/*", "bin/*"],
     },
     install_requires=[
         "flet>=0.21.0",
