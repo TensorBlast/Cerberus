@@ -1,5 +1,4 @@
 import flet
-import tempfile, stat
 import pexpect
 from flet import (
     FontWeight,
@@ -18,7 +17,6 @@ from flet import (
     Text,
     TextField,
     colors,
-    border_radius,
     RoundedRectangleBorder,
     ControlState,
     Container,
@@ -26,9 +24,9 @@ from flet import (
 )
 import subprocess
 import os
-import re
-import sys
 import time
+import re
+
 
 def main(page: Page):
     # Update window styling
@@ -163,7 +161,6 @@ def main(page: Page):
     )
 
     # Command execution function
-    import re
 
     def execute_command(e):
         nonlocal identity_files_encrypted
