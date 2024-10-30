@@ -58,8 +58,13 @@ def get_binary_path(binary_name):
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
-        # When running from source, go up one directory from the current file
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # When running from source or pip install, use the package's bin directory
+        if getattr(sys, 'frozen', False):
+            # Running as bundled executable
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # Running from source, go up one directory from the current file
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Construct binary path
     binary_path = os.path.join(base_path, 'bin', platform_name, cpu_arch, binary_name)
@@ -69,11 +74,18 @@ def get_binary_path(binary_name):
         st = os.stat(binary_path)
         os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
     else:
-        raise FileNotFoundError(
-            f"Binary not found: {binary_path}\n"
-            f"System details: {sys.platform}, {platform.machine()}\n"
-            f"Base path: {base_path}"
-        )
+        # Try alternate path for PyInstaller bundle
+        alt_binary_path = os.path.join(base_path, platform_name, cpu_arch, binary_name)
+        if os.path.exists(alt_binary_path):
+            binary_path = alt_binary_path
+            st = os.stat(binary_path)
+            os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
+        else:
+            raise FileNotFoundError(
+                f"Binary not found: {binary_path}\n"
+                f"System details: {sys.platform}, {platform.machine()}\n"
+                f"Base path: {base_path}"
+            )
 
     return binary_path
 
