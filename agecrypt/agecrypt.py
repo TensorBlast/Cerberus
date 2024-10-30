@@ -29,68 +29,64 @@ import re
 
 import sys
 import platform
+import stat
 
 
-def resource_path(relative_path):
-    """Get absolute path to resource, works for dev and PyInstaller"""
+def get_binary_path(binary_name):
+    """Get the correct binary path based on platform and architecture."""
+    # Get CPU architecture
+    cpu_arch = platform.machine().lower()
+    
+    # Normalize architecture names
+    arch_map = {
+        'x86_64': 'amd64',
+        'amd64': 'amd64',
+        'arm64': 'arm64',
+        'aarch64': 'arm64',
+    }
+    cpu_arch = arch_map.get(cpu_arch, cpu_arch)
+    
+    # Determine OS platform
+    if sys.platform.startswith('darwin'):
+        platform_name = 'mac'
+    elif sys.platform.startswith('linux'):
+        platform_name = 'linux'
+    else:
+        raise OSError(f"Unsupported platform: {sys.platform}")
+
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
-        # If not running as bundled executable, use the script's directory
-        if getattr(sys, 'frozen', False):
-            # Running as compiled executable
-            base_path = os.path.dirname(sys.executable)
-        else:
-            # Running as script
-            base_path = os.path.dirname(os.path.abspath(__file__))
-    
-    # Construct the absolute path
-    abs_path = os.path.join(base_path, relative_path)
-    
-    # Verify the path exists
-    if not os.path.exists(abs_path):
-        raise FileNotFoundError(f"Resource not found: {abs_path}")
-        
-    return abs_path
+        # When running from source, go up one directory from the current file
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-def get_system_info():
-    """Determine the operating system and architecture."""
-    system = platform.system().lower()
-    machine = platform.machine().lower()
+    # Construct binary path
+    binary_path = os.path.join(base_path, 'bin', platform_name, cpu_arch, binary_name)
     
-    # Normalize architecture names
-    if machine in ['x86_64', 'amd64']:
-        arch = 'amd64'
-    elif machine in ['arm64', 'aarch64']:
-        arch = 'arm64'
+    # Make binary executable
+    if os.path.exists(binary_path):
+        st = os.stat(binary_path)
+        os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
     else:
-        arch = machine
-    
-    # Normalize OS names
-    if system == 'darwin':
-        os_name = 'mac'
-    elif system == 'linux':
-        os_name = 'linux'
-    else:
-        os_name = system
-        
-    return os_name, arch
+        raise FileNotFoundError(
+            f"Binary not found: {binary_path}\n"
+            f"System details: {sys.platform}, {platform.machine()}\n"
+            f"Base path: {base_path}"
+        )
 
-# Add this right after the resource_path function
-os_name, arch = get_system_info()
+    return binary_path
 
 # Update executable paths and ensure they're executable
-AGE_EXECUTABLE = resource_path(f'bin/{os_name}/{arch}/age')
-AGE_KEYGEN_EXECUTABLE = resource_path(f'bin/{os_name}/{arch}/age-keygen')
+AGE_EXECUTABLE = get_binary_path('age')
+AGE_KEYGEN_EXECUTABLE = get_binary_path('age-keygen')
 
 # Make executables executable on Unix-like systems
-if os_name in ['mac', 'linux']:
-    try:
-        os.chmod(AGE_EXECUTABLE, 0o755)
-        os.chmod(AGE_KEYGEN_EXECUTABLE, 0o755)
-    except Exception as e:
-        print(f"Warning: Could not set executable permissions: {e}")
+try:
+    os.chmod(AGE_EXECUTABLE, 0o755)
+    os.chmod(AGE_KEYGEN_EXECUTABLE, 0o755)
+except Exception as e:
+    print(f"Warning: Could not set executable permissions: {e}")
 
 def main(page: Page):
     # Update window styling
